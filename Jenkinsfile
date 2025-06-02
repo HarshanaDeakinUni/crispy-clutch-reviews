@@ -2,18 +2,20 @@ pipeline {
   agent any
 
   environment {
-    SONAR_TOKEN = credentials('sonar-token')
+    SONAR_TOKEN = credentials('sonar-token') // set this in Jenkins secrets
   }
 
   stages {
     stage('Build') {
       steps {
+        echo '🧱 Building Docker image...'
         sh 'docker build -t hotbag-app .'
       }
     }
 
     stage('Test') {
       steps {
+        echo '🧪 Running backend tests...'
         dir('backend') {
           sh 'npm install'
           sh 'npm test'
@@ -23,26 +25,30 @@ pipeline {
 
     stage('Code Quality') {
       steps {
+        echo '🔍 Running SonarQube analysis...'
         sh 'sonar-scanner -Dsonar.login=$SONAR_TOKEN'
       }
     }
 
     stage('Security') {
       steps {
+        echo '🛡 Running npm audit...'
         dir('backend') {
-          sh 'npm audit || true'
+          sh 'npm audit --audit-level=moderate || true'
         }
       }
     }
 
     stage('Deploy') {
       steps {
-        sh 'docker-compose up -d'
+        echo '🚀 Deploying with Docker Compose...'
+        sh 'docker-compose up -d --build'
       }
     }
 
     stage('Release') {
       steps {
+        echo '🏷 Tagging release...'
         script {
           def tag = "v1.${env.BUILD_NUMBER}"
           sh "git tag ${tag}"
@@ -53,8 +59,15 @@ pipeline {
 
     stage('Monitoring') {
       steps {
+        echo '📈 Checking backend health...'
         sh 'curl --fail http://localhost:3000/health || exit 1'
       }
+    }
+  }
+
+  post {
+    always {
+      echo '✅ Pipeline finished!'
     }
   }
 }
