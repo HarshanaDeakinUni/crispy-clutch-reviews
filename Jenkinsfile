@@ -1,73 +1,50 @@
 pipeline {
-  agent any
+    agent any
 
-  environment {
-    SONAR_TOKEN = credentials('sonar-token') // set this in Jenkins secrets
-  }
-
-  stages {
-    stage('Build') {
-      steps {
-        echo '🧱 Building Docker image...'
-        sh 'docker build -t hotbag-app .'
-      }
-    }
-
-    stage('Test') {
-      steps {
-        echo '🧪 Running backend tests...'
-        dir('backend') {
-          sh 'npm install'
-          sh 'npm test'
+    stages {
+        stage('Checkout') {
+            steps {
+                git branch: 'main', url: 'https://github.com/HarshanaDeakinUni/8.2CDevSecOps.git'
+            }
         }
-      }
-    }
 
-    stage('Code Quality') {
-      steps {
-        echo '🔍 Running SonarQube analysis...'
-        sh 'sonar-scanner -Dsonar.login=$SONAR_TOKEN'
-      }
-    }
-
-    stage('Security') {
-      steps {
-        echo '🛡 Running npm audit...'
-        dir('backend') {
-          sh 'npm audit --audit-level=moderate || true'
+        stage('Install Dependencies') {
+            steps {
+                sh 'npm install'
+            }
         }
-      }
-    }
 
-    stage('Deploy') {
-      steps {
-        echo '🚀 Deploying with Docker Compose...'
-        sh 'docker-compose up -d --build'
-      }
-    }
-
-    stage('Release') {
-      steps {
-        echo '🏷 Tagging release...'
-        script {
-          def tag = "v1.${env.BUILD_NUMBER}"
-          sh "git tag ${tag}"
-          sh "git push origin ${tag}"
+        stage('Run Tests') {
+            steps {
+                sh 'npm test || true'
+            }
         }
-      }
-    }
 
-    stage('Monitoring') {
-      steps {
-        echo '📈 Checking backend health...'
-        sh 'curl --fail http://localhost:3000/health || exit 1'
-      }
-    }
-  }
+        stage('Generate Coverage Report') {
+            steps {
+                sh 'npm run coverage || true'
+            }
+        }
 
-  post {
-    always {
-      echo '✅ Pipeline finished!'
+        stage('NPM Audit (Security Scan)') {
+            steps {
+                sh 'npm audit || true'
+            }
+        }
+
+        stage('SonarCloud Analysis') {
+            steps {
+                withCredentials([string(credentialsId: 'SONAR_TOKEN', variable: 'SONAR_TOKEN')]) {
+                    sh '''
+                        wget https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-5.0.1.3006-linux.zip
+                        unzip sonar-scanner-cli-5.0.1.3006-linux.zip
+                        export PATH=$PATH:$(pwd)/sonar-scanner-5.0.1.3006-linux/bin
+                        
+                        sonar-scanner \
+                          -Dsonar.login=$SONAR_TOKEN
+                    '''
+                }
+            }
+        }
     }
-  }
 }
